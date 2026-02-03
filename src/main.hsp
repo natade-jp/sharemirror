@@ -9,7 +9,6 @@
 
 #packopt name		"ShareMirror"
 #packopt runtime	"hsprt"
-#packopt upx		"1"
 
 #packopt type		0
 #packopt xsize		1
