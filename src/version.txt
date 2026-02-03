@@ -1,0 +1,14 @@
+;[ICON]
+;filename=icon.ico
+
+;[VERSION]
+_FILEVERSION=1.0.0.0
+_PRODUCTVERSION=1.0.0.0
+FileVersion=1.0.0.0
+ProductVersion=1.0.0.0
+FileDescription=ミラーウィンドウを作成
+CompanyName=natade
+LegalCopyright=Copyright (C) natade
+OriginalFilename=ShareMirror.exe
+ProductName=ShareMirror
+Comments=https://github.com/natade-jp/

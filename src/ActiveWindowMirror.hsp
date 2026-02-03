@@ -1,0 +1,137 @@
+;========================================================
+; ActiveWindowMirror モジュール
+;========================================================
+
+#module ActiveWindowMirror hdcScreen, pad, bufId, lastW, lastH, rc
+
+#uselib "user32.dll"
+#func GetForegroundWindow "GetForegroundWindow"
+#func GetWindowRect "GetWindowRect" int, var
+#cfunc IsIconic "IsIconic" int
+
+#func GetCursorPos "GetCursorPos" var
+#func GetCursorInfo "GetCursorInfo" var
+#func GetIconInfo "GetIconInfo" int, var
+#func DrawIconEx "DrawIconEx" int, int, int, int, int, int, int, int, int
+
+#uselib "gdi32.dll"
+#cfunc CreateDC "CreateDCA" sptr, sptr, sptr, int
+#func DeleteDC "DeleteDC" int
+#func BitBlt "BitBlt" int, int, int, int, int, int, int, int, int
+#func DeleteObject "DeleteObject" int
+
+#define NULL        0
+#define SRCCOPY     0x00CC0020
+#define CAPTUREBLT  0x40000000
+
+; DrawIconEx
+#define DI_NORMAL   0x0003
+
+; CURSORINFO
+#define CURSOR_SHOWING 0x00000001
+
+#modinit int _bufId, int _pad
+    bufId = _bufId
+    pad   = _pad
+    lastW = -1
+    lastH = -1
+    dim rc, 4
+
+    hdcScreen = CreateDC("DISPLAY", NULL, NULL, NULL)
+    return
+
+#modterm
+    if hdcScreen != 0 : DeleteDC hdcScreen
+    hdcScreen = 0
+    return
+
+#modcfunc capture int selfHwnd, var outW, var outH
+    GetForegroundWindow
+    fg = stat
+
+    if fg = 0 : return 0
+    if fg = selfHwnd : return 0
+    if IsIconic(fg) != 0 : return 0
+
+    GetWindowRect fg, rc
+    left   = rc(0)
+    top    = rc(1)
+    right  = rc(2)
+    bottom = rc(3)
+
+    w = right - left
+    h = bottom - top
+    if (w <= 0) | (h <= 0) : return 0
+
+    ; 余白
+    left   -= pad
+    top    -= pad
+    right  += pad
+    bottom += pad
+
+    ; 画面外クリップ
+    if left < 0 : left = 0
+    if top < 0 : top = 0
+    if right > ginfo_dispx : right = ginfo_dispx
+    if bottom > ginfo_dispy : bottom = ginfo_dispy
+
+    w = right - left
+    h = bottom - top
+    if (w <= 0) | (h <= 0) : return 0
+
+    ; bufferを必要なときだけ作り直し
+    if (w != lastW) | (h != lastH) {
+        buffer bufId, w, h
+        lastW = w
+        lastH = h
+    }
+
+    ; まず画面をコピー
+    gsel bufId
+    BitBlt hdc, 0, 0, w, h, hdcScreen, left, top, SRCCOPY | CAPTUREBLT
+
+    ; ===== カーソルを重ね描き =====
+    ; cursor position
+    dim pt, 2
+    GetCursorPos pt
+    cx = pt(0)
+    cy = pt(1)
+
+    ; cursor info
+    ; CURSORINFO は (cbSize, flags, hCursor, x, y) みたいな感じで受ける
+    ; HSPは構造体がないので int配列で受ける
+    dim ci, 5
+    ci(0) = 20 ; sizeof(CURSORINFO) = 20 bytes
+    GetCursorInfo ci
+
+    flags  = ci(1)
+    hCur   = ci(2)
+
+    if (flags & CURSOR_SHOWING) != 0 {
+        ; キャプチャ範囲内にカーソルがある時だけ描く
+        if (cx >= left) & (cx < right) & (cy >= top) & (cy < bottom) {
+            ; ICONINFO (fIcon, xHotspot, yHotspot, hbmMask, hbmColor)
+            dim ii, 5
+            GetIconInfo hCur, ii
+
+            hotX = ii(1)
+            hotY = ii(2)
+
+            ; buffer上の座標（ホットスポット分だけ左上へ）
+            dx = (cx - left) - hotX
+            dy = (cy - top)  - hotY
+
+            ; 描画
+            DrawIconEx hdc, dx, dy, hCur, 0, 0, 0, 0, DI_NORMAL
+
+            ; GetIconInfoが作ったビットマップは解放必須
+            if ii(3) != 0 : DeleteObject ii(3) ; hbmMask
+            if ii(4) != 0 : DeleteObject ii(4) ; hbmColor
+        }
+    }
+
+    outW = w
+    outH = h
+    return 1
+
+#global

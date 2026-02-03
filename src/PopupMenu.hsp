@@ -1,0 +1,48 @@
+;========================================================
+; PopupMenu モジュール
+;  - CreatePopupMenu で作ったメニューを保持
+;  - modterm で DestroyMenu を自動実行
+;  - show(x,y,ownerHwnd) で表示して選択IDを返す
+;========================================================
+
+#module PopupMenu hMenu
+
+#uselib "user32.dll"
+#func CreatePopupMenu "CreatePopupMenu"
+#func AppendMenu "AppendMenuA" int, int, int, sptr
+#func TrackPopupMenu "TrackPopupMenu" int, int, int, int, int, int, int
+#func DestroyMenu "DestroyMenu" int
+
+#define TPM_RETURNCMD  0x0100
+#define MF_STRING      0x0000
+#define MF_SEPARATOR   0x0800
+
+#modinit
+    CreatePopupMenu
+    hMenu = stat
+    return
+
+#modterm
+    if hMenu != 0 : DestroyMenu hMenu
+    hMenu = 0
+    return
+
+; 文字列項目を追加
+#modfunc addItem int id, str text
+    if hMenu = 0 : return
+    AppendMenu hMenu, MF_STRING, id, text
+    return
+
+; セパレータを追加
+#modfunc addSeparator
+    if hMenu = 0 : return
+    AppendMenu hMenu, MF_SEPARATOR, 0, ""
+    return
+
+; メニュー表示して、選ばれたIDを返す（0=キャンセル）
+#modcfunc show int x, int y, int ownerHwnd
+    if hMenu = 0 : return 0
+    TrackPopupMenu hMenu, TPM_RETURNCMD, x, y, 0, ownerHwnd, 0
+    return stat
+
+#global
