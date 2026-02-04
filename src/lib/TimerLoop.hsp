@@ -1,0 +1,54 @@
+;========================================================
+; TimerLoop.hsp
+;  - newmod でインスタンス化できるタイマー
+;  - SetTimer/KillTimer を隠蔽
+;  - WM_TIMER を受けたら登録ラベルへ gosub
+;========================================================
+
+#module TimerLoop timerId, interval, tickLabel
+
+#uselib "user32.dll"
+#func SetTimer  "SetTimer"  int, int, int, int
+#func KillTimer "KillTimer" int, int
+
+#define TL_WM_TIMER 0x0113
+
+;-----------------------------------------
+; インスタンス初期化
+;   _timerId    : WM_TIMER の wparam と一致させるID
+;   _intervalMs : タイマー周期(ms)
+;   _tickLabel  : 呼び出したいラベル（例: *tick_capture）
+;-----------------------------------------
+#modinit int _timerId, int _intervalMs, label _tickLabel
+    timerId   = _timerId
+    interval  = _intervalMs
+    tickLabel = _tickLabel
+    return
+
+; WM_TIMER のメッセージIDを返す（メインから数値を消したい用）
+#modcfunc tl_messageId
+    return TL_WM_TIMER
+
+; タイマー開始
+#modfunc tl_start int targetHwnd
+    SetTimer targetHwnd, timerId, interval, 0
+    return
+
+; タイマー停止
+#modfunc tl_stop int targetHwnd
+    KillTimer targetHwnd, timerId
+    return
+
+; oncmd から呼ぶ入口（wparamを見て自分のIDならtickを呼ぶ）
+#modfunc tl_dispatch
+    ; 再入防止（割り込みが重なるのを防ぐ）
+    oncmd 0
+
+    if wparam = timerId {
+        gosub tickLabel
+    }
+
+    oncmd 1
+    return
+
+#global

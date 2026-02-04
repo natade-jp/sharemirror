@@ -2,6 +2,7 @@
 #include "./lib/PopupMenu.hsp"
 #include "./lib/WindowFollower.hsp"
 #include "./lib/WinUtil.hsp"
+#include "./lib/TimerLoop.hsp"
 
 ;==================================================
 ; ビルドオプション
@@ -25,22 +26,10 @@
 #packopt lang        "1041"
 
 ;==================================================
-; タイマーなど
-;==================================================
-
-#uselib "user32.dll"
-#func SetTimer "SetTimer" int, int, int, int
-#func KillTimer "KillTimer" int, int
-
-#define WM_TIMER        0x0113
-#define TIMER_ID        1
-#define TIMER_MS        100
-
-#define IDM_EXIT        1
-
-;==================================================
 ; ID / 設定 定数
 ;==================================================
+#define IDM_EXIT        1
+
 #define TITLE_NAME      "ShareMirror"
 #define WIN_MAIN        0
 #define BUF_CAPTURE     2
@@ -49,6 +38,10 @@
 #define INIT_H          240
 #define BUF_INIT_W      480
 #define BUF_INIT_H      360
+
+; タイマー設定（TimerLoop用）
+#define TIMER_ID        1
+#define TIMER_MS        100
 
 ;--------------------------------------------------
 ; ウィンドウ作成（bgscr）
@@ -65,7 +58,7 @@ mes TITLE_NAME
 ; キャプチャ先バッファ
 buffer BUF_CAPTURE, BUF_INIT_W, BUF_INIT_H
 
-; ★重要：bufferで操作先が変わるので、必ずメインへ戻す
+; bufferで操作先が変わるので、必ずメインへ戻す
 gsel WIN_MAIN
 
 ;--------------------------------------------------
@@ -79,27 +72,35 @@ addItem menu, IDM_EXIT, "終了"
 
 newmod follower, WindowFollower, hwnd
 
+; TimerLoop（タイマー管理）
+newmod tloop, TimerLoop, TIMER_ID, TIMER_MS, *tick_capture
+
 ;--------------------------------------------------
 ; イベント登録（WIN_MAINに対して）
 ;--------------------------------------------------
 gsel WIN_MAIN
 onclick gosub *ev_click
-oncmd  gosub *ev_timer, WM_TIMER
+; WM_TIMER は TimerLoop 側から取得
+oncmd  gosub *ev_timer, tl_messageId(tloop)
 onexit goto  *app_exit
 
 ; タイマー開始
-SetTimer hwnd, TIMER_ID, TIMER_MS, 0
+tl_start tloop, hwnd
 
 stop
 
 
+;--------------------------------------------------
+; WM_TIMER イベント入口
+;--------------------------------------------------
 *ev_timer
-    oncmd 0
-    if wparam = TIMER_ID : gosub *tick_capture
-    oncmd 1
+    tl_dispatch tloop
     return
 
 
+;--------------------------------------------------
+; 周期処理本体（キャプチャ＆描画）
+;--------------------------------------------------
 *tick_capture
     w = 0 : h = 0
     ok = capture(cap, hwnd, w, h)
@@ -111,11 +112,15 @@ stop
     ; 表示
     gsel WIN_MAIN
     redraw 0
+    pos 0, 0 ; 左上に貼り付けする（mesでposがずれるため）
     gcopy BUF_CAPTURE, 0, 0, w, h
     redraw 1
     return
 
 
+;--------------------------------------------------
+; マウスクリックイベント
+;--------------------------------------------------
 *ev_click
     ; 左クリック：どこでもドラッグ
     if wparam = 1 {
@@ -131,9 +136,17 @@ stop
     return
 
 
+;--------------------------------------------------
+; 終了処理
+;--------------------------------------------------
 *app_exit
-    KillTimer hwnd, TIMER_ID
+    ; タイマー停止
+    tl_stop tloop, hwnd
+
+    ; モジュール解放
     delmod menu
     delmod cap
     delmod follower
+    delmod tloop
+
     end
