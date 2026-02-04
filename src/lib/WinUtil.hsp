@@ -1,0 +1,15 @@
+; WinUtil.hsp
+#module WinUtil
+
+#uselib "user32.dll"
+#func SendMessageA "SendMessageA" int, int, int, int
+
+#define WM_NCLBUTTONDOWN 0x00A1
+#define HTCAPTION 2
+
+; ‚Ç‚±‚Å‚àƒhƒ‰ƒbƒOˆÚ“®
+#deffunc DragMove int targetHwnd
+    SendMessageA targetHwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0
+    return
+
+#global

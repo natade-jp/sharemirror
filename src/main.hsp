@@ -1,5 +1,11 @@
 #include "./lib/ActiveWindowMirror.hsp"
 #include "./lib/PopupMenu.hsp"
+#include "./lib/WindowFollower.hsp"
+#include "./lib/WinUtil.hsp"
+
+;==================================================
+; ビルドオプション
+;==================================================
 
 #cmpopt ppout 0
 #cmpopt optcode 1
@@ -7,139 +13,109 @@
 #cmpopt varname 0
 #cmpopt optprm 1
 
-#packopt name		"ShareMirror"
-#packopt runtime	"hsprt"
+#packopt name        "ShareMirror"
+#packopt runtime     "hsprt"
+#packopt upx         "0"
+#packopt type        0
+#packopt xsize       1
+#packopt ysize       1
+#packopt hide        1
+#packopt orgpath     1
+#packopt version     "version.txt"
+#packopt lang        "1041"
 
-#packopt type		0
-#packopt xsize		1
-#packopt ysize		1
-#packopt hide		1
-#packopt orgpath	1
-
-#packopt version	"version.txt"
-#packopt lang		"1041"
-
-
-#module
-#uselib "user32.dll"
-#func SendMessageA "SendMessageA" int, int, int, int
-#define WM_NCLBUTTONDOWN 0x00A1
-#define HTCAPTION 2
-;--------------------------------------------------
-; どこでもドラッグ移動
-;--------------------------------------------------
-#deffunc DragMove int handle
-    SendMessageA handle, WM_NCLBUTTONDOWN, HTCAPTION, 0
-    return
-#global
-
+;==================================================
+; タイマーなど
+;==================================================
 
 #uselib "user32.dll"
-#func MoveWindow "MoveWindow" int, int, int, int, int, int
-#func GetWindowRect "GetWindowRect" int, var
 #func SetTimer "SetTimer" int, int, int, int
 #func KillTimer "KillTimer" int, int
 
-#define WM_TIMER 0x0113
-#define TIMER_ID 1
-#define TIMER_MS 100   ; 約100ms（必要なら調整）
+#define WM_TIMER        0x0113
+#define TIMER_ID        1
+#define TIMER_MS        100
 
-#define IDM_EXIT 1
+#define IDM_EXIT        1
 
 ;==================================================
-; ID 定数定義
+; ID / 設定 定数
 ;==================================================
+#define TITLE_NAME      "ShareMirror"
+#define WIN_MAIN        0
+#define BUF_CAPTURE     2
 
-#define TITLE_NAME		"ShareMirror"
-#define WIN_MAIN        0   ; bgscr / gsel のメインウィンドウID
-#define BUF_CAPTURE     2   ; キャプチャ用バッファID
+#define INIT_W          320
+#define INIT_H          240
+#define BUF_INIT_W      480
+#define BUF_INIT_H      360
 
 ;--------------------------------------------------
 ; ウィンドウ作成（bgscr）
 ;--------------------------------------------------
 gsel WIN_MAIN, -1
-// 事前に画面の大きさまで広げておく（このサイズより大きくはできないが、縮小は可能であるため）
+; 事前に最大まで確保（縮小は可能）
 bgscr WIN_MAIN, ginfo_dispx, ginfo_dispy
-
-// 縮小させる
-width 320, 240
+width INIT_W, INIT_H
 
 gsel WIN_MAIN
 title TITLE_NAME
 mes TITLE_NAME
 
 ; キャプチャ先バッファ
-buffer BUF_CAPTURE, 480, 360
+buffer BUF_CAPTURE, BUF_INIT_W, BUF_INIT_H
 
-; イベント登録のため 0 へ戻す
+; ★重要：bufferで操作先が変わるので、必ずメインへ戻す
 gsel WIN_MAIN
 
-; アクティブウィンドウミラー
+;--------------------------------------------------
+; モジュール生成
+;--------------------------------------------------
 pad = 0
 newmod cap, ActiveWindowMirror, BUF_CAPTURE, pad
 
-; 右クリックメニュー（終了のみ）
 newmod menu, PopupMenu
 addItem menu, IDM_EXIT, "終了"
 
-; イベント登録
+newmod follower, WindowFollower, hwnd
+
+;--------------------------------------------------
+; イベント登録（WIN_MAINに対して）
+;--------------------------------------------------
+gsel WIN_MAIN
 onclick gosub *ev_click
 oncmd  gosub *ev_timer, WM_TIMER
 onexit goto  *app_exit
 
-; ウィンドウ位置保持
-dim wr, 4
-lastWinW = -1
-lastWinH = -1
-
 ; タイマー開始
 SetTimer hwnd, TIMER_ID, TIMER_MS, 0
-timerID = stat
 
 stop
 
-;--------------------------------------------------
-; WM_TIMER イベント
-;--------------------------------------------------
+
 *ev_timer
-    ; 再入防止
     oncmd 0
-
-    if wparam = TIMER_ID {
-        gosub *tick_capture
-    }
-
+    if wparam = TIMER_ID : gosub *tick_capture
     oncmd 1
     return
 
-;--------------------------------------------------
-; 周期処理本体（キャプチャ＆描画）
-;--------------------------------------------------
+
 *tick_capture
     w = 0 : h = 0
-    
     ok = capture(cap, hwnd, w, h)
     if ok = 0 : return
 
-    ; キャプチャサイズにウィンドウを追従
-    if (w != lastWinW) | (h != lastWinH) {
-        gsel WIN_MAIN
-        MoveWindow hwnd, ginfo_wx1, ginfo_wy1, w, h, 1
-        lastWinW = w
-        lastWinH = h
-    }
+    ; サイズ追従（必要なときだけ MoveWindow）
+    EnsureSize follower, w, h
 
     ; 表示
     gsel WIN_MAIN
     redraw 0
-    pos 0, 0
     gcopy BUF_CAPTURE, 0, 0, w, h
     redraw 1
     return
 
-;--------------------------------------------------
-; マウスクリックイベント
-;--------------------------------------------------
+
 *ev_click
     ; 左クリック：どこでもドラッグ
     if wparam = 1 {
@@ -150,19 +126,14 @@ stop
     ; 右クリック：終了メニュー
     if wparam = 2 {
         id = show(menu, ginfo_mx, ginfo_my, hwnd)
-        if id = IDM_EXIT {
-            goto *app_exit
-        }
+        if id = IDM_EXIT : goto *app_exit
     }
     return
 
-;--------------------------------------------------
-; 終了処理
-;--------------------------------------------------
+
 *app_exit
     KillTimer hwnd, TIMER_ID
-
-    ; モジュール解放（modterm が確実に呼ばれる）
     delmod menu
     delmod cap
+    delmod follower
     end

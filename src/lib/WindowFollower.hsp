@@ -1,0 +1,29 @@
+; WindowFollower.hsp
+#module WindowFollower hwndTarget, lastW, lastH, rc
+
+#uselib "user32.dll"
+#func MoveWindow "MoveWindow" int, int, int, int, int, int
+#func GetWindowRect "GetWindowRect" int, var
+
+#modinit int _hwnd
+    hwndTarget = _hwnd
+    lastW = -1
+    lastH = -1
+    dim rc, 4
+    return
+
+; 必要なときだけ、今の位置のままサイズ変更
+#modfunc EnsureSize int w, int h
+    if (w <= 0) | (h <= 0) : return
+    if (w = lastW) & (h = lastH) : return
+
+    GetWindowRect hwndTarget, rc
+    x = rc(0)
+    y = rc(1)
+
+    MoveWindow hwndTarget, x, y, w, h, 1
+    lastW = w
+    lastH = h
+    return
+
+#global
