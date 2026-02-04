@@ -1,5 +1,5 @@
-#include "ActiveWindowMirror.hsp"
-#include "PopupMenu.hsp"
+#include "./lib/ActiveWindowMirror.hsp"
+#include "./lib/PopupMenu.hsp"
 
 #cmpopt ppout 0
 #cmpopt optcode 1
