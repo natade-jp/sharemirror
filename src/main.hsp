@@ -31,13 +31,11 @@
 #define IDM_EXIT        1
 
 #define TITLE_NAME      "ShareMirror"
-#define WIN_MAIN        0
-#define BUF_CAPTURE     2
+#define WIN_MAIN        2
+#define BUF_CAPTURE     3
 
 #define INIT_W          320
 #define INIT_H          240
-#define BUF_INIT_W      480
-#define BUF_INIT_H      360
 
 ; タイマー設定（TimerLoop用）
 #define TIMER_ID        1
@@ -46,17 +44,27 @@
 ;--------------------------------------------------
 ; ウィンドウ作成（bgscr）
 ;--------------------------------------------------
-gsel WIN_MAIN, -1
-; 事前に最大まで確保（縮小は可能）
-bgscr WIN_MAIN, ginfo_dispx, ginfo_dispy
+; メインウィンドウは非表示とする
+gsel 0, -1
+
+; 事前に最大まで確保（縮小は可能）、p4 = 2 で非表示で作成
+bgscr WIN_MAIN, ginfo_dispx, ginfo_dispy, 2
 width INIT_W, INIT_H
 
-gsel WIN_MAIN
+; 画面を非表示の状態で青背景でタイトルを表示
 title TITLE_NAME
+color 0, 0, 255
+boxf
+color 255, 255, 255
+font "Meiryo UI"
 mes TITLE_NAME
+mes "右クリックメニューから終了できます"
+pos 0, 0 ; カレントポジションを左上に戻す
+
+gsel WIN_MAIN, 1 ; 表示
 
 ; キャプチャ先バッファ
-buffer BUF_CAPTURE, BUF_INIT_W, BUF_INIT_H
+buffer BUF_CAPTURE
 
 ; bufferで操作先が変わるので、必ずメインへ戻す
 gsel WIN_MAIN
@@ -64,15 +72,10 @@ gsel WIN_MAIN
 ;--------------------------------------------------
 ; モジュール生成
 ;--------------------------------------------------
-pad = 0
-newmod cap, ActiveWindowMirror, BUF_CAPTURE, pad
-
+newmod cap, ActiveWindowMirror, BUF_CAPTURE, 0
 newmod menu, PopupMenu
 addItem menu, IDM_EXIT, "終了"
-
 newmod follower, WindowFollower, hwnd
-
-; TimerLoop（タイマー管理）
 newmod tloop, TimerLoop, TIMER_ID, TIMER_MS, *tick_capture
 
 ;--------------------------------------------------
@@ -80,7 +83,6 @@ newmod tloop, TimerLoop, TIMER_ID, TIMER_MS, *tick_capture
 ;--------------------------------------------------
 gsel WIN_MAIN
 onclick gosub *ev_click
-; WM_TIMER は TimerLoop 側から取得
 oncmd  gosub *ev_timer, tl_messageId(tloop)
 onexit goto  *app_exit
 
@@ -112,7 +114,6 @@ stop
     ; 表示
     gsel WIN_MAIN
     redraw 0
-    pos 0, 0 ; 左上に貼り付けする（mesでposがずれるため）
     gcopy BUF_CAPTURE, 0, 0, w, h
     redraw 1
     return
