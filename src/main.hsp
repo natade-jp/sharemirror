@@ -30,6 +30,7 @@
 #packopt ysize       1
 #packopt hide        1
 #packopt orgpath     1
+#packopt icon        "icon256.ico"
 #packopt version     "version.txt"
 #packopt lang        "1041"
 
@@ -48,6 +49,11 @@
 ; タイマー設定（TimerLoop用）
 #define TIMER_ID        1
 #define TIMER_MS        100
+
+#define WM_KEYDOWN 0x0100
+#define VK_BACK    8
+#define VK_ESCAPE  27
+#define VK_DELETE  46
 
 ;==================================================
 ; ミラー制御設定
@@ -71,8 +77,10 @@ color 0, 0, 255
 boxf
 color 255, 255, 255
 font "Meiryo UI"
+pos 10, 10
 mes TITLE_NAME
-mes "右クリックメニューから終了できます"
+mes "右クリックメニューから終了の選択"
+mes "又は DEL or ESC or BACK で終了できます"
 pos 0, 0 ; カレントポジションを左上に戻す
 
 gsel WIN_MAIN, 1 ; 表示
@@ -98,6 +106,7 @@ newmod tloop, TimerLoop, TIMER_ID, TIMER_MS, *tick_capture
 gsel WIN_MAIN
 onclick gosub *ev_click
 oncmd  gosub *ev_timer, tl_messageId(tloop)
+oncmd gosub *ev_keydown, WM_KEYDOWN
 onexit goto  *app_exit
 
 ; タイマー開始
@@ -113,6 +122,17 @@ stop
     tl_dispatch tloop
     return
 
+;--------------------------------------------------
+; キー入力イベント（WIN_MAINがアクティブ時のみ）
+;--------------------------------------------------
+*ev_keydown
+    ; 念のため：ミラーウィンドウがアクティブのときだけ反応
+    if ginfo(2) != WIN_MAIN : return
+
+    if (wparam = VK_BACK) | (wparam = VK_ESCAPE) | (wparam = VK_DELETE) {
+        goto *app_exit
+    }
+    return
 
 ;--------------------------------------------------
 ; 周期処理本体（キャプチャ＆描画）
