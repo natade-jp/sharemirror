@@ -4,6 +4,14 @@
 #include "./lib/WinUtil.hsp"
 #include "./lib/TimerLoop.hsp"
 
+#uselib "user32.dll"
+#func GetForegroundWindow "GetForegroundWindow"
+#func GetDesktopWindow   "GetDesktopWindow"
+#func GetShellWindow     "GetShellWindow"
+
+#uselib "kernel32.dll"
+#cfunc GetTickCount "GetTickCount"
+
 ;==================================================
 ; ビルドオプション
 ;==================================================
@@ -40,6 +48,12 @@
 ; タイマー設定（TimerLoop用）
 #define TIMER_ID        1
 #define TIMER_MS        100
+
+;==================================================
+; ミラー制御設定
+;==================================================
+IGNORE_DESKTOP = 1        ; 1=デスクトップ無視, 0=無効
+SWITCH_DELAY_MS = 3000    ; 切替待ち時間(ms) / 0で即切替
 
 ;--------------------------------------------------
 ; ウィンドウ作成（bgscr）
@@ -104,14 +118,82 @@ stop
 ; 周期処理本体（キャプチャ＆描画）
 ;--------------------------------------------------
 *tick_capture
+    ; 現在の前面ウィンドウ
+    fg = GetForegroundWindow()
+
+    ; 自分自身は常に無視
+    if fg = hwnd : return
+
+    ;------------------------------
+    ; デスクトップ無視
+    ;------------------------------
+    if IGNORE_DESKTOP {
+        if fg = GetDesktopWindow() : return
+        if fg = GetShellWindow()   : return
+    }
+
+    ;------------------------------
+    ; 初回は即採用
+    ;------------------------------
+    if lastTargetHwnd = 0 {
+        lastTargetHwnd = fg
+        pendingHwnd = 0
+        pendingStart = 0
+	    gosub *do_capture
+	    return
+    }
+
+    ;------------------------------
+    ; 同じウィンドウなら普通に更新
+    ;------------------------------
+    if fg = lastTargetHwnd {
+        pendingHwnd = 0
+        pendingStart = 0
+	    gosub *do_capture
+	    return
+    }
+
+    ;------------------------------
+    ; 切替ディレイなし
+    ;------------------------------
+    if SWITCH_DELAY_MS <= 0 {
+        lastTargetHwnd = fg
+        pendingHwnd = 0
+        pendingStart = 0
+	    gosub *do_capture
+	    return
+    }
+
+    ;------------------------------
+    ; 切替候補の管理
+    ;------------------------------
+    if fg != pendingHwnd {
+        pendingHwnd = fg
+        pendingStart = GetTickCount()
+        return
+    }
+
+    ; 待ち時間チェック
+    now = GetTickCount()
+    if (now - pendingStart) < SWITCH_DELAY_MS : return
+
+    ; 規定時間経過 → 切替確定
+    lastTargetHwnd = pendingHwnd
+    pendingHwnd = 0
+    pendingStart = 0
+
+    gosub *do_capture
+    return
+
+*do_capture
     w = 0 : h = 0
     ok = capture(cap, hwnd, w, h)
     if ok = 0 : return
 
-    ; サイズ追従（必要なときだけ MoveWindow）
+    ; サイズ追従
     EnsureSize follower, w, h
 
-    ; 表示
+    ; 描画
     gsel WIN_MAIN
     redraw 0
     gcopy BUF_CAPTURE, 0, 0, w, h
