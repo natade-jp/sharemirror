@@ -3,6 +3,7 @@
 #include "./lib/WindowFollower.hsp"
 #include "./lib/WinUtil.hsp"
 #include "./lib/TimerLoop.hsp"
+#include "./lib/MirrorTargetResolver.hsp"
 
 #uselib "user32.dll"
 #func GetForegroundWindow "GetForegroundWindow"
@@ -152,6 +153,10 @@ stop
         if fg = GetShellWindow()   : return
     }
 
+    targetWnd = 0
+	if ResolveMirrorTarget(fg, targetWnd) = 0 : return
+	fg = targetWnd
+
     ;------------------------------
     ; 初回は即採用
     ;------------------------------
@@ -206,8 +211,9 @@ stop
     return
 
 *do_capture
+	
     w = 0 : h = 0
-    ok = capture(cap, hwnd, w, h)
+    ok = capture(cap, hwnd, lastTargetHwnd, w, h)
     if ok = 0 : return
 
     ; サイズ追従

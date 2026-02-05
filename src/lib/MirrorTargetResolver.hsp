@@ -1,0 +1,99 @@
+#module MirrorTargetResolver
+
+#uselib "user32.dll"
+#func GetClassNameA  "GetClassNameA"  int, var, int
+#func GetWindowTextA "GetWindowTextA" int, var, int
+#func GetAncestor    "GetAncestor"    int, int
+#func GetWindow      "GetWindow"      int, int
+#func GetParent      "GetParent"      int
+
+#define GA_ROOTOWNER 3
+#define GW_OWNER     4
+
+; 内部：クラス名取得
+#deffunc _getClassName int targetWnd, var outStr
+    sdim outStr, 64
+    if targetWnd != 0 {
+        GetClassNameA targetWnd, outStr, 64
+    } else {
+        outStr = ""
+    }
+    return
+
+; 内部：タイトル取得
+#deffunc _getTitleText int targetWnd, var outStr
+    sdim outStr, 256
+    if targetWnd != 0 {
+        GetWindowTextA targetWnd, outStr, 256
+    } else {
+        outStr = ""
+    }
+    return
+
+; 内部：一時UIっぽいクラスを弾く（必要に応じて増やす）
+#defcfunc _isTransientClass str className
+    if className = "#32768"   : return 1   ; 一般的なポップアップメニュー
+    if className = "NetUIHWND": return 1   ; Office系の一時UIでよく出る
+    return 0
+
+;--------------------------------------------------
+; ResolveMirrorTarget (汎用)
+;
+; in : foregroundWnd = GetForegroundWindow() の戻り
+; out: resultWnd     = 採用する対象ウィンドウ
+;
+; return:
+;   1 = 採用
+;   0 = 不採用（切替しない）
+;--------------------------------------------------
+#defcfunc ResolveMirrorTarget int foregroundWnd, var resultWnd
+
+    resultWnd = 0
+    if foregroundWnd = 0 : return 0
+
+    ; まずGA_ROOTOWNERを上がり切る（あなたの案）
+    currentWnd = foregroundWnd
+    repeat 32
+        nextWnd = GetAncestor(currentWnd, GA_ROOTOWNER)
+        if nextWnd = 0 : break
+        if nextWnd = currentWnd : break
+        currentWnd = nextWnd
+    loop
+
+    ; currentWnd がルート候補
+    sdim className, 64
+    sdim titleText, 256
+    _getClassName currentWnd, className
+    _getTitleText currentWnd, titleText
+
+    ; ルート候補が一時UIなら、owner/parent方向で本体探し
+    if _isTransientClass(className) {
+        probeWnd = foregroundWnd
+        repeat 32
+            if probeWnd = 0 : break
+
+            _getClassName probeWnd, className
+            _getTitleText probeWnd, titleText
+
+            ; 一時UIじゃない窓が見つかったら採用（タイトル無しでもOKだが、条件は好み）
+            if _isTransientClass(className) = 0 {
+                resultWnd = probeWnd
+                return 1
+            }
+
+            ownerWnd = GetWindow(probeWnd, GW_OWNER)
+            if ownerWnd != 0 {
+                probeWnd = ownerWnd
+                continue
+            }
+            probeWnd = GetParent(probeWnd)
+        loop
+
+        return 0
+    }
+
+    ; ルート候補が普通なら採用
+    resultWnd = currentWnd
+    return 1
+
+#global

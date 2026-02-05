@@ -45,9 +45,8 @@
     hdcScreen = 0
     return
 
-#modcfunc capture int selfHwnd, var outW, var outH
-    GetForegroundWindow
-    fg = stat
+#modcfunc capture int selfHwnd, int targetHwnd, var outW, var outH
+    fg = targetHwnd
 
     if fg = 0 : return 0
     if fg = selfHwnd : return 0
